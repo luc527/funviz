@@ -216,12 +216,6 @@ int main(int argc, char *argv[])
         line yaxis_vp = line_win_xform_inv(yaxis_win, win_width, win_height);
         line yaxis_c  = line_plane_xform_inv(viewport, yaxis_vp);
 
-        if (viewport_changed){
-            SDL_Log("---");
-            SDL_Log("x-axis: (%.2f, %.2f) to (%.2f, %.2f)", LINE_SPREAD(xaxis_c));
-            SDL_Log("y-axis: (%.2f, %.2f) to (%.2f, %.2f)", LINE_SPREAD(yaxis_c));
-        }
-
         // draw function
         SDL_SetRenderDrawColor(renderer, 0+soften_term, 0+soften_term, 255-soften_term, 255);
 
