@@ -180,7 +180,7 @@ int main(int argc, char *argv[])
                 win_width  = e.window.data1;
                 win_height = e.window.data2;
                 break;
-            // TODO: drag with cursor (complicated!)
+            // [todo] drag with cursor
             }
         }
 
@@ -197,10 +197,10 @@ int main(int argc, char *argv[])
         vec2 origin_win = vec2_win_xform(origin_vp, win_width, win_height);
 
         // Left-to-right.
-        line xaxis_win  = {{0.0f, origin_win.y}, {win_width, origin_win.y}};
+        line xaxis_win = {{0.0f, origin_win.y}, {win_width, origin_win.y}};
 
         // Top-to-bottom.
-        line yaxis_win  = {{origin_win.x, 0.0f}, {origin_win.x, win_height}};
+        line yaxis_win = {{origin_win.x, 0.0f}, {origin_win.x, win_height}};
 
         // draw y-axis and x-axis
         SDL_SetRenderDrawColor(renderer, 0+soften_term, 0+soften_term, 0+soften_term, 255);
@@ -246,7 +246,7 @@ int main(int argc, char *argv[])
             line_count++;
         }
 
-        if (viewport_changed){
+        if (viewport_changed) {
             SDL_Log("---");
             SDL_Log("x-axis: (%.2f, %.2f) to (%.2f, %.2f)", LINE_SPREAD(xaxis_c));
             SDL_Log("y-axis: (%.2f, %.2f) to (%.2f, %.2f)", LINE_SPREAD(yaxis_c));
