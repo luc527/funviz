@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <stdio.h>
 #include <SDL3/SDL.h>
 
 typedef struct vec2_s {
@@ -85,6 +86,25 @@ line line_plane_xform_inv(plane plane, line l) {
     return r;
 }
 
+float lerp(float a, float b, float amount) {
+    return a + (b - a) * amount;
+}
+
+vec2 vec2_lerp(vec2 a, vec2 b, float amount) {
+    vec2 r = {
+        x: lerp(a.x, b.x, amount),
+        y: lerp(a.y, b.y, amount),
+    };
+    return r;
+}
+
+plane plane_lerp(plane a, plane b, float amount) {
+    plane r = {
+        o: vec2_lerp(a.o, b.o, amount),
+        s: vec2_lerp(a.s, b.s, amount),
+    };
+    return r;
+}
 
 int main(int argc, char *argv[])
 {
@@ -104,18 +124,23 @@ int main(int argc, char *argv[])
 
     const vec2 origin = {0.0f, 0.0f};
 
-    SDL_Window *window;
-    SDL_Renderer *renderer;
-
-    int win_width  = initial_win_width;
-    int win_height = initial_win_height;
-
     const plane initial_viewport = {
         {0.0f, 0.0f},
         {1.0f, 1.0f},
     };
 
+    const Uint64 anim_duration_ms = 120;
+
+
+    SDL_Window *window;
+    SDL_Renderer *renderer;
+
     plane viewport = initial_viewport;
+    plane anim_prev_viewport = viewport;
+    plane anim_curr_viewport = viewport;
+
+    int win_width  = initial_win_width;
+    int win_height = initial_win_height;
 
     {
         const char *title = "hello world";
@@ -131,11 +156,30 @@ int main(int argc, char *argv[])
 
     // [todo] add options to reflect the viewport on yaxis/xaxis (just multiply the scale by -1) 
 
+
+    // [todo] anim is nice, but keeping the key pressed down doesn't work as expected (one continuous animation)
+
+    Uint64 anim_start_ms = 0;
+
     while (true) {
-        plane old_viewport = viewport;
+        // [todo] framelimit to 60fps
+
+        Uint64 anim_elapsed_ms = SDL_GetTicks() - anim_start_ms;
+
+        if (anim_elapsed_ms <= anim_duration_ms) {
+            // [todo] easing function for anim
+            float z = (float) anim_elapsed_ms / anim_duration_ms;
+            anim_curr_viewport = plane_lerp(anim_prev_viewport, viewport, z);
+        } else {
+            anim_curr_viewport = viewport;
+        }
+
+        plane viewport_before_pollevent = viewport;
 
         SDL_Event e;
         while (SDL_PollEvent(&e)) {
+            if (anim_elapsed_ms <= anim_duration_ms) continue;
+
             switch (e.type) {
             case SDL_EVENT_QUIT:
                 goto quit;
@@ -184,16 +228,22 @@ int main(int argc, char *argv[])
             }
         }
 
-        bool viewport_changed = 0 != memcmp((void *)&viewport, (void *)&old_viewport, sizeof(plane));
-        if (viewport_changed) SDL_Log("viewport changed!");
+        bool viewport_changed = 0 != memcmp((void *)&viewport, (void *)&viewport_before_pollevent, sizeof(plane));
+        if (viewport_changed) {
+            SDL_Log("viewport changed!");
+            anim_start_ms = SDL_GetTicks();
+            anim_prev_viewport = viewport_before_pollevent;
+            anim_curr_viewport = viewport_before_pollevent;
+        }
 
-        // long elapsed_ms = SDL_GetTicks();
+        // change to just `viewport` to disable animations
+        plane viewport_render = anim_curr_viewport;
 
         // white bg
         SDL_SetRenderDrawColor(renderer, 255-soften_term, 255-soften_term, 255-soften_term, 255);
         SDL_RenderClear(renderer);
 
-        vec2 origin_vp  = vec2_plane_xform(viewport, origin);
+        vec2 origin_vp  = vec2_plane_xform(viewport_render, origin);
         vec2 origin_win = vec2_win_xform(origin_vp, win_width, win_height);
 
         // Left-to-right.
@@ -210,11 +260,13 @@ int main(int argc, char *argv[])
         // The function has to be plotted only over the x-values visible in the window.
         // To know which part of the x-axis is being displayed, we apply the inverses of the transforms:
         line xaxis_vp = line_win_xform_inv(xaxis_win, win_width, win_height);
-        line xaxis_c  = line_plane_xform_inv(viewport, xaxis_vp);
+        line xaxis_c  = line_plane_xform_inv(viewport_render, xaxis_vp);
 
         // For bounds-checking.
         line yaxis_vp = line_win_xform_inv(yaxis_win, win_width, win_height);
-        line yaxis_c  = line_plane_xform_inv(viewport, yaxis_vp);
+        line yaxis_c  = line_plane_xform_inv(viewport_render, yaxis_vp);
+
+        // [todo] animate viewport motions
 
         // draw function
         SDL_SetRenderDrawColor(renderer, 0+soften_term, 0+soften_term, 255-soften_term, 255);
@@ -232,7 +284,7 @@ int main(int argc, char *argv[])
             vec2 v2 = {c_x2, SDL_sin(c_x2)};
 
             line l_c   = {v1, v2};
-            line l_vp  = line_plane_xform(viewport, l_c);
+            line l_vp  = line_plane_xform(viewport_render, l_c);
             line l_win = line_win_xform(l_vp, win_width, win_height);
             SDL_RenderLine(renderer, LINE_SPREAD(l_win));
 
