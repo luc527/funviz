@@ -129,7 +129,10 @@ int main(int argc, char *argv[])
         {1.0f, 1.0f},
     };
 
-    const Uint64 anim_duration_ms = 120;
+    const Uint64 anim_duration_ms = 80;
+
+    const float scale_step = 0.04f;
+    const float offset_step = 0.16f;
 
 
     SDL_Window *window;
@@ -157,7 +160,7 @@ int main(int argc, char *argv[])
     // [todo] add options to reflect the viewport on yaxis/xaxis (just multiply the scale by -1) 
 
 
-    // [todo] anim is nice, but keeping the key pressed down doesn't work as expected (one continuous animation)
+    // [todo] anim is nice, but keeping the key pressed down is jittery
 
     Uint64 anim_start_ms = 0;
 
@@ -166,9 +169,10 @@ int main(int argc, char *argv[])
 
         Uint64 anim_elapsed_ms = SDL_GetTicks() - anim_start_ms;
 
-        if (anim_elapsed_ms <= anim_duration_ms) {
-            // [todo] easing function for anim
+        bool in_anim = anim_elapsed_ms <= anim_duration_ms;
+        if (in_anim) {
             float z = (float) anim_elapsed_ms / anim_duration_ms;
+            z = 1-SDL_pow(1-z, 3); // ease out cubic
             anim_curr_viewport = plane_lerp(anim_prev_viewport, viewport, z);
         } else {
             anim_curr_viewport = viewport;
@@ -178,7 +182,7 @@ int main(int argc, char *argv[])
 
         SDL_Event e;
         while (SDL_PollEvent(&e)) {
-            if (anim_elapsed_ms <= anim_duration_ms) continue;
+            if (in_anim) continue;
 
             switch (e.type) {
             case SDL_EVENT_QUIT:
@@ -192,7 +196,6 @@ int main(int argc, char *argv[])
                 }
                 break;
             case SDL_EVENT_KEY_DOWN:
-                // [todo] reset viewport
                 switch (e.key.key) {
                 case SDLK_R:
                     viewport = initial_viewport;
@@ -203,20 +206,20 @@ int main(int argc, char *argv[])
                     shift_down = true;
                     break;
                 case SDLK_UP:
-                    if (shift_down) viewport.s.y += 0.025f;
-                    else viewport.o.y += 0.1f;
+                    if (shift_down) viewport.s.y += scale_step;
+                    else viewport.o.y += offset_step;
                     break;
                 case SDLK_DOWN:
-                    if (shift_down) viewport.s.y = SDL_max(viewport.s.y-0.025f, 0.01f);
-                    else viewport.o.y -= 0.1f;
+                    if (shift_down) viewport.s.y = SDL_max(viewport.s.y-scale_step, 0.01f);
+                    else viewport.o.y -= offset_step;
                     break;
                 case SDLK_RIGHT:
-                    if (shift_down) viewport.s.x += 0.025f;
-                    else viewport.o.x += 0.1f;
+                    if (shift_down) viewport.s.x += scale_step;
+                    else viewport.o.x += offset_step;
                     break;
                 case SDLK_LEFT:
-                    if (shift_down) viewport.s.x = SDL_max(viewport.s.x-0.025f, 0.01f);
-                    else viewport.o.x -= 0.1f;
+                    if (shift_down) viewport.s.x = SDL_max(viewport.s.x-scale_step, 0.01f);
+                    else viewport.o.x -= offset_step;
                     break;
                 }
                 break;
@@ -230,7 +233,7 @@ int main(int argc, char *argv[])
 
         bool viewport_changed = 0 != memcmp((void *)&viewport, (void *)&viewport_before_pollevent, sizeof(plane));
         if (viewport_changed) {
-            SDL_Log("viewport changed!");
+            // SDL_Log("viewport changed!");
             anim_start_ms = SDL_GetTicks();
             anim_prev_viewport = viewport_before_pollevent;
             anim_curr_viewport = viewport_before_pollevent;
@@ -266,39 +269,97 @@ int main(int argc, char *argv[])
         line yaxis_vp = line_win_xform_inv(yaxis_win, win_width, win_height);
         line yaxis_c  = line_plane_xform_inv(viewport_render, yaxis_vp);
 
-        // [todo] animate viewport motions
+        // draw rulers
+        {
+            // for now hardcode 0.1 step size
+            float step = 0.1f;
+            // [todo] change dynamically based on x and y scale
+
+            float ruler_height = (float) win_height / 150.0f;
+            float ruler_width  = (float) win_width  / 150.0f;
+
+            // origin rightwards
+            for (float c_x = 0.0f; c_x < xaxis_c.v1.x; c_x += step) {
+                vec2 point_c   = {c_x, xaxis_c.v0.y};
+                vec2 point_vp  = vec2_plane_xform(viewport_render, point_c);
+                vec2 point_win = vec2_win_xform(point_vp, win_width, win_height);
+                line ruler_win = {
+                    {point_win.x, point_win.y - ruler_height},
+                    {point_win.x, point_win.y + ruler_height}
+                };
+                SDL_RenderLine(renderer, LINE_SPREAD(ruler_win));
+            }
+
+            // origin leftwards
+            for (float c_x = 0.0f; c_x > xaxis_c.v0.x; c_x -= step) {
+                vec2 point_c   = {c_x, xaxis_c.v0.y};
+                vec2 point_vp  = vec2_plane_xform(viewport_render, point_c);
+                vec2 point_win = vec2_win_xform(point_vp, win_width, win_height);
+                line ruler_win = {
+                    {point_win.x, point_win.y - ruler_height},
+                    {point_win.x, point_win.y + ruler_height}
+                };
+                SDL_RenderLine(renderer, LINE_SPREAD(ruler_win));
+            }
+
+            // origin downwards
+            for (float c_y = 0.0f; c_y < yaxis_c.v0.y; c_y += step) {
+                vec2 point_c   = {yaxis_c.v0.x, c_y};
+                vec2 point_vp  = vec2_plane_xform(viewport_render, point_c);
+                vec2 point_win = vec2_win_xform(point_vp, win_width, win_height);
+                line ruler_win = {
+                    {point_win.x - ruler_width, point_win.y},
+                    {point_win.x + ruler_width, point_win.y}
+                };
+                SDL_RenderLine(renderer, LINE_SPREAD(ruler_win));
+            }
+
+            // origin upwards
+            for (float c_y = 0.0f; c_y > yaxis_c.v1.y; c_y -= step) {
+                vec2 point_c   = {yaxis_c.v0.x, c_y};
+                vec2 point_vp  = vec2_plane_xform(viewport_render, point_c);
+                vec2 point_win = vec2_win_xform(point_vp, win_width, win_height);
+                line ruler_win = {
+                    {point_win.x - ruler_width, point_win.y},
+                    {point_win.x + ruler_width, point_win.y}
+                };
+                SDL_RenderLine(renderer, LINE_SPREAD(ruler_win));
+            }
+
+        }
 
         // draw function
-        SDL_SetRenderDrawColor(renderer, 0+soften_term, 0+soften_term, 255-soften_term, 255);
-
-        float resolution = 0.1f;
-
-        vec2 v1 = {xaxis_c.v0.x, SDL_sin(xaxis_c.v0.x)};
-
         int line_count = 0;
-        for (
-            float c_x2 = xaxis_c.v0.x + resolution;
-            c_x2 < xaxis_c.v1.x;
-            c_x2 += resolution
-        ) {
-            vec2 v2 = {c_x2, SDL_sin(c_x2)};
-
-            line l_c   = {v1, v2};
-            line l_vp  = line_plane_xform(viewport_render, l_c);
-            line l_win = line_win_xform(l_vp, win_width, win_height);
-            SDL_RenderLine(renderer, LINE_SPREAD(l_win));
-
-            v1 = v2;
-            line_count++;
+        {
+            SDL_SetRenderDrawColor(renderer, 0+soften_term, 0+soften_term, 255-soften_term, 255);
+    
+            float resolution = 0.1f;
+    
+            vec2 v1 = {xaxis_c.v0.x, SDL_sin(xaxis_c.v0.x)};
+    
+            for (
+                float c_x2 = xaxis_c.v0.x + resolution;
+                c_x2 < xaxis_c.v1.x;
+                c_x2 += resolution
+            ) {
+                vec2 v2 = {c_x2, SDL_sin(c_x2)};
+    
+                line l_c   = {v1, v2};
+                line l_vp  = line_plane_xform(viewport_render, l_c);
+                line l_win = line_win_xform(l_vp, win_width, win_height);
+                SDL_RenderLine(renderer, LINE_SPREAD(l_win));
+    
+                v1 = v2;
+                line_count++;
+            }
         }
 
-        if (viewport_changed) {
-            SDL_Log("---");
-            SDL_Log("x-axis: (%.2f, %.2f) to (%.2f, %.2f)", LINE_SPREAD(xaxis_c));
-            SDL_Log("y-axis: (%.2f, %.2f) to (%.2f, %.2f)", LINE_SPREAD(yaxis_c));
-            SDL_Log("lines: %d", line_count);
-        }
-
+        // if (viewport_changed) {
+        //     SDL_Log("---");
+        //     SDL_Log("x-axis: (%.2f, %.2f) to (%.2f, %.2f)", LINE_SPREAD(xaxis_c));
+        //     SDL_Log("y-axis: (%.2f, %.2f) to (%.2f, %.2f)", LINE_SPREAD(yaxis_c));
+        //     SDL_Log("lines: %d", line_count);
+        // }
 
         SDL_RenderPresent(renderer);
     }
