@@ -106,6 +106,8 @@ plane plane_lerp(plane a, plane b, float amount) {
     return r;
 }
 
+// [todo] plane + win transforms always invoked together; optimize
+
 int main(int argc, char *argv[])
 {
     putenv("SDL_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR=0"); 
@@ -117,7 +119,7 @@ int main(int argc, char *argv[])
 
     SDL_Log("SDL initialised\n");
 
-    const int soften_term = 21;
+    const int soften_term = 32;
 
     const int initial_win_width  = 1200;
     const int initial_win_height =  800;
@@ -133,6 +135,9 @@ int main(int argc, char *argv[])
 
     const float scale_step = 0.04f;
     const float offset_step = 0.16f;
+
+    const int fps = 60;
+    const float ms_per_frame = 1000.0f / (float) fps;
 
 
     SDL_Window *window;
@@ -164,8 +169,15 @@ int main(int argc, char *argv[])
 
     Uint64 anim_start_ms = 0;
 
+    Uint64 prev_frame_ms = 0;
+
     while (true) {
-        // [todo] framelimit to 60fps
+        Uint64 elapsed_ms = SDL_GetTicks() - prev_frame_ms;
+        Uint64 wait_ms    = SDL_max(0, ms_per_frame - elapsed_ms);
+        if (wait_ms > 0) {
+            SDL_Delay(wait_ms);
+        }
+        prev_frame_ms = SDL_GetTicks();
 
         Uint64 anim_elapsed_ms = SDL_GetTicks() - anim_start_ms;
 
@@ -272,8 +284,8 @@ int main(int argc, char *argv[])
         // draw rulers
         {
             // for now hardcode 0.1 step size
-            float step = 0.1f;
             // [todo] change dynamically based on x and y scale
+            float step = 0.1f;
 
             float ruler_height = (float) win_height / 150.0f;
             float ruler_width  = (float) win_width  / 150.0f;
